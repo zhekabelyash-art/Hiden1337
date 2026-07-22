@@ -1,4 +1,4 @@
--- // [zero_core v4.2] // game: steal a brainrot
+-- // [zero_core v4.3] // game: steal a brainrot
 -- // target: localplayer / bypass hooked
 
 local Players = game:GetService("Players")
@@ -12,6 +12,11 @@ local Char = LP.Character or LP.CharacterAdded:Wait()
 local Root = Char:WaitForChild("HumanoidRootPart")
 
 local gethui = gethui or function() return CoreGui end
+
+-- Удаляем старую копию UI, если она была открыта
+if CoreGui:FindFirstChild("ZeroHub_Brainrot") then
+    CoreGui.ZeroHub_Brainrot:Destroy()
+end
 
 -- UI Core
 local ScreenGui = Instance.new("ScreenGui")
@@ -31,13 +36,9 @@ MainFrame.Active = true
 MainFrame.Draggable = true
 MainFrame.ZIndex = 1
 
-local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.Parent = MainFrame
-UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-UIListLayout.Padding = UDim.new(0, 6)
-
+-- Header Title
 local Title = Instance.new("TextLabel")
+Title.Name = "Title"
 Title.Parent = MainFrame
 Title.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 Title.BorderSizePixel = 0
@@ -48,9 +49,42 @@ Title.TextColor3 = Color3.fromRGB(0, 255, 128)
 Title.TextSize = 16
 Title.ZIndex = 2
 
+-- Close Button (Крестик)
+local CloseButton = Instance.new("TextButton")
+CloseButton.Name = "CloseButton"
+CloseButton.Parent = Title
+CloseButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+CloseButton.BorderSizePixel = 0
+CloseButton.Position = UDim2.new(1, -30, 0, 5)
+CloseButton.Size = UDim2.new(0, 25, 0, 25)
+CloseButton.Font = Enum.Font.SourceSansBold
+CloseButton.Text = "X"
+CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseButton.TextSize = 14
+CloseButton.ZIndex = 3
+
+CloseButton.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+end)
+
+-- Container for buttons
+local Container = Instance.new("Frame")
+Container.Name = "Container"
+Container.Parent = MainFrame
+Container.BackgroundTransparency = 1
+Container.Position = UDim2.new(0, 0, 0, 40)
+Container.Size = UDim2.new(1, 0, 1, -40)
+Container.ZIndex = 2
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Parent = Container
+UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 6)
+
 local function createToggle(name, callback)
     local btn = Instance.new("TextButton")
-    btn.Parent = MainFrame
+    btn.Parent = Container
     btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     btn.BorderColor3 = Color3.fromRGB(60, 60, 60)
     btn.Size = UDim2.new(0.9, 0, 0, 35)
@@ -58,7 +92,7 @@ local function createToggle(name, callback)
     btn.Text = name .. ": [ OFF ]"
     btn.TextColor3 = Color3.fromRGB(200, 200, 200)
     btn.TextSize = 14
-    btn.ZIndex = 2
+    btn.ZIndex = 3
     
     local enabled = false
     btn.MouseButton1Click:Connect(function()
