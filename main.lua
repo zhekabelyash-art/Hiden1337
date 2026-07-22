@@ -1,4 +1,4 @@
--- // [zero_core v4.4] // game: steal a brainrot
+-- // [zero_core v4.5] // game: steal a brainrot
 -- // target: localplayer / bypass hooked
 
 local Players = game:GetService("Players")
@@ -141,19 +141,23 @@ end)
 local infJumpConn
 createToggle("Infinite Jump", function(state)
     if state then
-        infJumpConn = UserInputService.JumpRequest:Connect(function()
-            if LP.Character and LP.Character:FindFirstChildOfClass("Humanoid") then
-                LP.Character:FindFirstChildOfClass("Humanoid"):ChangeState(Enum.HumanoidState.Jumping)
+        infJumpConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+            if not gameProcessed and input.KeyCode == Enum.KeyCode.Space then
+                if LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") then
+                    local hrp = LP.Character.HumanoidRootPart
+                    hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, 50, hrp.AssemblyLinearVelocity.Z)
+                end
             end
         end)
     else
         if infJumpConn then
             infJumpConn:Disconnect()
+            infJumpConn = nil
         end
     end
 end)
 
--- 3. Remove Walls (Отключение коллизий у объектов)
+-- 3. Remove Walls
 createToggle("Remove Walls", function(state)
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj:IsA("BasePart") and not obj:IsDescendantOf(LP.Character) and obj.Name ~= "Terrain" then
@@ -192,6 +196,7 @@ createToggle("Noclip", function(state)
     else
         if noclipConn then
             noclipConn:Disconnect()
+            noclipConn = nil
         end
     end
 end)
