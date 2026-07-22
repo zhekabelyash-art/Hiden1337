@@ -1,4 +1,4 @@
--- Hub: Brainrot Farmer | Roblox Lua
+-- Hub: Hiden1337 | Roblox Lua
 -- deps: Roblox Studio, LocalScript в StarterPlayer.StarterCharacterScripts или StarterGui
 
 local UserInputService = game:GetService("UserInputService")
@@ -8,6 +8,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
 local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
 
 -- ============= КОНФИГ =============
@@ -19,6 +20,7 @@ local CONFIG = {
     DROP_ENABLED = false,
     AUTO_BUY_ENABLED = false,
     SPEED_UPGRADE_ENABLED = false,
+    STEEL_FLOOR_SPEED = 50, -- скорость подъёма платформы
     JUMP_KEY = Enum.KeyCode.Space,
     STEAL_KEY = Enum.KeyCode.E,
     DROP_KEY = Enum.KeyCode.R,
@@ -26,7 +28,7 @@ local CONFIG = {
 
 -- ============= GUI =============
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "BrainrotFarmHub"
+screenGui.Name = "Hiden1337"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
@@ -59,7 +61,7 @@ titleLabel.BackgroundColor3 = Color3.fromRGB(0, 200, 150)
 titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 titleLabel.TextSize = 18
 titleLabel.Font = Enum.Font.GothamBold
-titleLabel.Text = "BRAINROT FARM HUB"
+titleLabel.Text = "HIDEN1337"
 titleLabel.Parent = mainPanel
 
 -- Функция создания кнопки
@@ -99,26 +101,29 @@ end)
 
 -- ============= МЕХАНИКИ =============
 
--- Infinite Jump
-local lastJumpTime = 0
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
+-- Infinite Jump (срабатывает при приземлении)
+humanoid.StateChanged:Connect(function(oldState, newState)
+    if not CONFIG.INFINITE_JUMP_ENABLED then return end
     
-    if input.KeyCode == CONFIG.JUMP_KEY and CONFIG.INFINITE_JUMP_ENABLED then
-        local humanoid = character:FindFirstChild("Humanoid")
-        if humanoid then
-            humanoid:Jump()
-        end
+    if newState == Enum.HumanoidStateType.Landed then
+        wait(0.05)
+        humanoid:Jump()
     end
 end)
 
--- Steel Floor (платформа под игроком)
+-- Steel Floor (платформа с автоматическим подъёмом)
 local steelFloor = nil
+local steelFloorVelocity = nil
+
 RunService.RenderStepped:Connect(function()
     if not CONFIG.STEEL_FLOOR_ENABLED then
         if steelFloor then
             steelFloor:Destroy()
             steelFloor = nil
+        end
+        if steelFloorVelocity then
+            steelFloorVelocity:Destroy()
+            steelFloorVelocity = nil
         end
         return
     end
@@ -127,14 +132,29 @@ RunService.RenderStepped:Connect(function()
         steelFloor = Instance.new("Part")
         steelFloor.Name = "SteelFloor"
         steelFloor.Shape = Enum.PartType.Block
-        steelFloor.Size = Vector3.new(10, 1, 10)
+        steelFloor.Size = Vector3.new(15, 1, 15)
         steelFloor.Material = Enum.Material.Metal
         steelFloor.CanCollide = true
         steelFloor.CFrame = CFrame.new(humanoidRootPart.Position + Vector3.new(0, -5, 0))
+        steelFloor.TopSurface = Enum.SurfaceType.Smooth
+        steelFloor.BottomSurface = Enum.SurfaceType.Smooth
         steelFloor.Parent = workspace
+        
+        steelFloorVelocity = Instance.new("BodyVelocity")
+        steelFloorVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        steelFloorVelocity.Velocity = Vector3.new(0, CONFIG.STEEL_FLOOR_SPEED, 0)
+        steelFloorVelocity.Parent = steelFloor
     end
     
+    -- Позиция платформы под игроком
     steelFloor.CFrame = CFrame.new(humanoidRootPart.Position + Vector3.new(0, -5, 0))
+    
+    -- Пассивный подъём туловища вверх
+    humanoidRootPart.AssemblyLinearVelocity = Vector3.new(
+        humanoidRootPart.AssemblyLinearVelocity.X,
+        CONFIG.STEEL_FLOOR_SPEED,
+        humanoidRootPart.AssemblyLinearVelocity.Z
+    )
 end)
 
 -- Instant Steal (телепорт на базу с бреинротом)
@@ -174,7 +194,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     
     if input.KeyCode == CONFIG.DROP_KEY and CONFIG.DROP_ENABLED then
-        -- Ищем в руке предмет и удаляем его
         local tools = character:FindFirstChildOfClass("Tool")
         if tools then
             tools.Parent = workspace
@@ -242,6 +261,9 @@ character.Humanoid.Died:Connect(function()
     if steelFloor then
         steelFloor:Destroy()
     end
+    if steelFloorVelocity then
+        steelFloorVelocity:Destroy()
+    end
 end)
 
-print("[BREAKER] Brainrot Farm Hub инициализирован. Иконка в углу экрана.")
+print("[Hiden1337] Инициализирован. Готов к работе.")
