@@ -1,4 +1,4 @@
--- // [zero_core v4.3] // game: steal a brainrot
+-- // [zero_core v4.4] // game: steal a brainrot
 -- // target: localplayer / bypass hooked
 
 local Players = game:GetService("Players")
@@ -13,7 +13,7 @@ local Root = Char:WaitForChild("HumanoidRootPart")
 
 local gethui = gethui or function() return CoreGui end
 
--- Удаляем старую копию UI, если она была открыта
+-- Удаляем старую копию UI
 if CoreGui:FindFirstChild("ZeroHub_Brainrot") then
     CoreGui.ZeroHub_Brainrot:Destroy()
 end
@@ -108,28 +108,32 @@ local function createToggle(name, callback)
     end)
 end
 
--- 1. Steel Floor
-local floorPart = nil
+-- 1. Steel Floor (Поднимающаяся платформа)
+local flyPart = nil
+local flyConn = nil
 createToggle("Steel Floor", function(state)
     if state then
-        floorPart = Instance.new("Part")
-        floorPart.Size = Vector3.new(5, 0.4, 5)
-        floorPart.Anchored = true
-        floorPart.CanCollide = true
-        floorPart.Transparency = 0.3
-        floorPart.Color = Color3.fromRGB(0, 255, 128)
-        floorPart.Parent = Workspace
+        flyPart = Instance.new("Part")
+        flyPart.Size = Vector3.new(12, 1, 12)
+        flyPart.Anchored = true
+        flyPart.CanCollide = true
+        flyPart.Transparency = 0.4
+        flyPart.Color = Color3.fromRGB(0, 255, 128)
+        flyPart.Parent = Workspace
         
-        RunService.RenderStepped:Connect(function()
-            if floorPart and Root then
-                floorPart.CFrame = Root.CFrame - Vector3.new(0, 3.5, 0)
+        if Root then
+            flyPart.CFrame = Root.CFrame - Vector3.new(0, 3.5, 0)
+        end
+        
+        flyConn = RunService.RenderStepped:Connect(function()
+            if flyPart and Root then
+                flyPart.CFrame = flyPart.CFrame + Vector3.new(0, 0.25, 0)
+                Root.CFrame = flyPart.CFrame + Vector3.new(0, 3.5, 0)
             end
         end)
     else
-        if floorPart then
-            floorPart:Destroy()
-            floorPart = nil
-        end
+        if flyConn then flyConn:Disconnect() flyConn = nil end
+        if flyPart then flyPart:Destroy() flyPart = nil end
     end
 end)
 
@@ -149,12 +153,25 @@ createToggle("Infinite Jump", function(state)
     end
 end)
 
--- 3. Remove Walls
+-- 3. Remove Walls (Отключение коллизий у объектов)
 createToggle("Remove Walls", function(state)
     for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and (obj.Name:lower():find("wall") or obj.Name:lower():find("door")) then
-            obj.CanCollide = not state
-            obj.Transparency = state and 0.7 or 0
+        if obj:IsA("BasePart") and not obj:IsDescendantOf(LP.Character) and obj.Name ~= "Terrain" then
+            if state then
+                if not obj:FindFirstChild("OrigCollide") then
+                    local val = Instance.new("BoolValue")
+                    val.Name = "OrigCollide"
+                    val.Value = obj.CanCollide
+                    val.Parent = obj
+                end
+                obj.CanCollide = false
+            else
+                local val = obj:FindFirstChild("OrigCollide")
+                if val then
+                    obj.CanCollide = val.Value
+                    val:Destroy()
+                end
+            end
         end
     end
 end)
