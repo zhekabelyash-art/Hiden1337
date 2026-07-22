@@ -26,29 +26,41 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "MeridianHub"
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
+-- Создаём иконку-круг
 local iconButton = Instance.new("ImageButton")
 iconButton.Size = UDim2.new(0, 50, 0, 50)
 iconButton.Position = UDim2.new(0.8, 0, 0.1, 0)
-iconButton.BackgroundTransparency = 1
-iconButton.Image = "rbxassetid://1234567890" -- Иконка (любой id)
+iconButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50) -- видимый фон, если картинка не грузится
+iconButton.BackgroundTransparency = 0.2
+iconButton.Image = "" -- оставляем пустым, используем фон
+iconButton.AutoButtonColor = false
 iconButton.Parent = screenGui
 
+-- Круглая обводка
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(1, 0)
+corner.Parent = iconButton
+
+-- Лейбл внутри (как значок)
+local iconLabel = Instance.new("TextLabel")
+iconLabel.Size = UDim2.new(1, 0, 1, 0)
+iconLabel.BackgroundTransparency = 1
+iconLabel.Text = "⚙"
+iconLabel.TextScaled = true
+iconLabel.TextColor3 = Color3.new(1, 1, 1)
+iconLabel.Font = Enum.Font.GothamBold
+iconLabel.Parent = iconButton
+
+-- Основная панель
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 200, 0, 250)
+mainFrame.Size = UDim2.new(0, 200, 0, 280) -- немного увеличена высота под все переключатели
 mainFrame.Position = UDim2.new(0.8, -160, 0.12, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 mainFrame.BorderSizePixel = 0
 mainFrame.Visible = false
 mainFrame.Parent = screenGui
 
-local titleLabel = Instance.new("TextLabel")
-titleLabel.Text = "BREAKER v0.1"
-titleLabel.Size = UDim2.new(1, 0, 0, 30)
-titleLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-titleLabel.TextColor3 = Color3.new(1, 1, 1)
-titleLabel.TextSize = 14
-titleLabel.Parent = mainFrame
-
+-- ... (дальше titleLabel и createToggle без изменений)
 -- Функция создания переключателя
 local function createToggle(name, yPos, callback)
 	local toggleFrame = Instance.new("Frame")
