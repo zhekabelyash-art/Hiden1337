@@ -1,6 +1,5 @@
--- // Steal A Brainrot – Hiden Hub v2 (Merid Fix)
--- // правки: Infinite Jump безопасный, Steel Floor быстрее и удаляется, убраны shop-кнопки,
--- // Drop Brainrot переписан на универсальный сброс
+-- // Steal A Brainrot – Hiden Hub v3 (Merid Adjust)
+-- // фиксы: быстрый и маленький Steel Floor, мягкий Infinite Jump, нет Drop/Stats
 
 if not game:IsLoaded() then
     game.Loaded:Wait()
@@ -26,7 +25,7 @@ local function getHRP()
     return c:WaitForChild("HumanoidRootPart"), c
 end
 
--- ============ ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ============
+-- ============ FLAGS ============
 
 getgenv().SAB_InfiniteJump = false
 getgenv().SAB_SteelFloor = false
@@ -59,8 +58,8 @@ UICornerIcon.Parent = IconButton
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 350, 0, 240) -- немного ниже
-MainFrame.Position = UDim2.new(0, 95, 0.5, -120)
+MainFrame.Size = UDim2.new(0, 350, 0, 190) -- ещё компактнее
+MainFrame.Position = UDim2.new(0, 95, 0.5, -95)
 MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 MainFrame.BorderSizePixel = 0
 MainFrame.Visible = false
@@ -128,7 +127,7 @@ local function makeToggle(name, default, callback)
     outer.Parent = ContentFrame
 
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 140, 1, 0)
+    btn.Size = UDim2.new(0, 160, 1, 0)
     btn.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
     btn.BorderSizePixel = 0
     btn.Text = default and "[ON] " .. name or "[OFF] " .. name
@@ -157,7 +156,7 @@ local function makeButton(name, callback)
     outer.Parent = ContentFrame
 
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 210, 1, 0)
+    btn.Size = UDim2.new(0, 230, 1, 0)
     btn.BackgroundColor3 = Color3.fromRGB(60, 40, 40)
     btn.BorderSizePixel = 0
     btn.Text = name
@@ -188,7 +187,6 @@ local function makeLabel(text)
     return lab
 end
 
--- иконка ↔ окно
 local function toggleMainVisible()
     MainFrame.Visible = not MainFrame.Visible
 end
@@ -232,18 +230,16 @@ do
     end)
 end
 
--- ============ ФУНКЦИИ ============
+-- ============ FEATURES ============
 
 makeLabel("Movement / Utility")
 
--- БЕЗОПАСНЫЙ Infinite Jump:
--- просто даём вверхнему импульсу Velocity, не трогая стейты
+-- мягкий Infinite Jump: форсим переход в Jumping при запросе прыжка
 UIS.JumpRequest:Connect(function()
     if not getgenv().SAB_InfiniteJump then return end
-    local hum, char = getHum()
-    local hrp = getHRP()
-    if hum and hrp then
-        hrp.Velocity = Vector3.new(hrp.Velocity.X, 50, hrp.Velocity.Z)
+    local hum = getHum()
+    if hum then
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
     end
 end)
 
@@ -251,18 +247,18 @@ makeToggle("Infinite Jump", false, function(state)
     getgenv().SAB_InfiniteJump = state
 end)
 
--- Steel Floor: быстрее апдейт и полное удаление при оффе
+-- Steel Floor: меньше размер, быстрее трекинг
 local function ensureSteelPart()
     if SteelPart and SteelPart.Parent then return SteelPart end
     local hrp = getHRP()
     local p = Instance.new("Part")
     p.Name = "SAB_SteelFloor"
-    p.Size = Vector3.new(6, 1, 6)
+    p.Size = Vector3.new(4, 0.7, 4) -- уменьшен размер
     p.Anchored = true
     p.CanCollide = true
     p.Material = Enum.Material.Metal
     p.Color = Color3.fromRGB(120, 120, 120)
-    p.CFrame = hrp.CFrame * CFrame.new(0, -3, 0)
+    p.CFrame = hrp.CFrame * CFrame.new(0, -2.5, 0)
     p.Parent = workspace
     SteelPart = p
     return SteelPart
@@ -270,11 +266,11 @@ end
 
 local function steelFloorLoop()
     while getgenv().SAB_SteelFloor do
-        task.wait(0.03) -- было 0.05 → быстрее ≈ в 1.6 раза
+        task.wait(0.02) -- ещё быстрее
         pcall(function()
             local hrp = getHRP()
             local p = ensureSteelPart()
-            p.CFrame = hrp.CFrame * CFrame.new(0, -3, 0)
+            p.CFrame = hrp.CFrame * CFrame.new(0, -2.5, 0)
         end)
     end
     if SteelPart then
@@ -288,15 +284,12 @@ makeToggle("Steel Floor (под тобой)", false, function(state)
     if state then
         task.spawn(steelFloorLoop)
     else
-        -- сразу чистим, не ждём цикла
         if SteelPart then
             SteelPart:Destroy()
             SteelPart = nil
         end
     end
 end)
-
--- ============ INSTANT STEAL / ЗОНА СБОРА ============
 
 makeLabel("Steal / Base")
 
@@ -319,107 +312,5 @@ UIS.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.KeyCode == Enum.KeyCode.G and getgenv().SAB_InstantSteal then
         instantSteal()
-    end
-end)
-
--- ============ DROP BRAINROT (универсальный) ============
-
-makeLabel("Drop Brainrot / Misc")
-
-local function findHeldBrainrot()
-    local char = getChar()
-
-    -- Tool в руках
-    local tool = char:FindFirstChildOfClass("Tool")
-    if tool then return tool end
-
-    -- объект на правой руке
-    local hand = char:FindFirstChild("RightHand") or char:FindFirstChild("Right Arm") or char:FindFirstChild("RightLowerArm")
-    if hand then
-        for _, v in ipairs(hand:GetChildren()) do
-            if v:IsA("BasePart") or v:IsA("Model") then
-                return v
-            end
-        end
-    end
-
-    -- всё, что привязано к HRP
-    local hrp = getHRP()
-    for _, v in ipairs(hrp:GetChildren()) do
-        if v:IsA("BasePart") or v:IsA("Model") then
-            return v
-        end
-    end
-
-    return nil
-end
-
--- Просто «уронить» объект с рук:
--- 1) если это Tool — эмулируем Backspace, если есть, иначе вручную
-local function dropBrainrot()
-    local obj = findHeldBrainrot()
-    if not obj then return end
-
-    -- если эксплойт поддерживает keypress:
-    if keypress and keyrelease then
-        keypress(0x08)  -- Backspace
-        task.wait()
-        keyrelease(0x08)
-        return
-    end
-
-    -- fallback: принудительно выбрасываем
-    local hrp = getHRP()
-
-    if obj:IsA("Tool") then
-        obj.Parent = workspace
-        if obj:FindFirstChild("Handle") then
-            obj.Handle.CFrame = hrp.CFrame * CFrame.new(0, -2, -2)
-        end
-    elseif obj:IsA("BasePart") then
-        obj.Anchored = false
-        obj.Parent = workspace
-        obj.CFrame = hrp.CFrame * CFrame.new(0, -2, -2)
-    elseif obj:IsA("Model") then
-        local primary = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-        obj.Parent = workspace
-        if primary then
-            primary.Anchored = false
-            primary.CFrame = hrp.CFrame * CFrame.new(0, -2, -2)
-        end
-    end
-end
-
-makeButton("Drop Brainrot (выкинуть)", function()
-    dropBrainrot()
-end)
-
--- «Вернуть на место» в v2 убираю: в этой игре исходные позиции могут
--- быть неочевидны, а твой кейс — именно быстро скинуть мискликнутый брэинрот.
-
--- ============ КРАТКАЯ ИНФО ПО СТАТАМ ============
-
-local statsLabel = makeLabel("Stats: ...")
-
-local function updateStats()
-    local ls = lp:FindFirstChild("leaderstats")
-    if not ls then
-        statsLabel.Text = "Stats: no leaderstats"
-        return
-    end
-    local function gv(name)
-        local v = ls:FindFirstChild(name)
-        if v and v.Value ~= nil then
-            return tostring(v.Value)
-        end
-        return "nil"
-    end
-    statsLabel.Text = string.format("Stats: Steals %s | Rebirths %s | Cash %s",
-        gv("Steals"), gv("Rebirths"), gv("Cash"))
-end
-
-task.spawn(function()
-    while task.wait(1) do
-        pcall(updateStats)
     end
 end)
