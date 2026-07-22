@@ -21,7 +21,7 @@ local autoUpgradeEnabled = false
 -- Координаты зоны сбора (настраиваются)
 local COLLECTION_ZONE_POS = Vector3.new(0, 0, 0) -- Заменить на реальные координаты
 
--- GUI элементы
+-- GUI элементы (исправлено)
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "MeridianHub"
 screenGui.Parent = player:WaitForChild("PlayerGui")
