@@ -1,21 +1,19 @@
--- // Steal A Brainrot – Hiden Hub (Merid Build)
--- // Требования: эксплойт с loadstring + HttpGet, keypress APIs не требуются
+-- // Steal A Brainrot – Hiden Hub v2 (Merid Fix)
+-- // правки: Infinite Jump безопасный, Steel Floor быстрее и удаляется, убраны shop-кнопки,
+-- // Drop Brainrot переписан на универсальный сброс
 
 if not game:IsLoaded() then
     game.Loaded:Wait()
 end
 
--- ============ SERVICES & SHORTCUTS ============
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
-local RS = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
 
 local lp = Players.LocalPlayer
 
 local function getChar()
-    local c = lp.Character or lp.CharacterAdded:Wait()
-    return c
+    return lp.Character or lp.CharacterAdded:Wait()
 end
 
 local function getHum()
@@ -28,34 +26,16 @@ local function getHRP()
     return c:WaitForChild("HumanoidRootPart"), c
 end
 
--- ============ REMOTES ============
-
-local Remotes = {}
-
-local function safeGetRemote(path)
-    local ok, res = pcall(function()
-        return loadstring("return " .. path)()
-    end)
-    if ok and typeof(res) == "Instance" then
-        return res
-    end
-    return nil
-end
-
-Remotes.Grab = safeGetRemote("game.ReplicatedStorage.Packages.Net.RE.StealService.Grab")
-Remotes.ShopPurchase = safeGetRemote("game.ReplicatedStorage.Packages.Net.RE.ShopService.Purchase")
-Remotes.ToggleAutoBuy = safeGetRemote("game.ReplicatedStorage.Packages.Net.RF.CoinsShopService.ToggleAutoBuy")
-Remotes.BuySpeedUpgrade = safeGetRemote("game.ReplicatedStorage.Packages.Net.RE.TsunamiEventService.BuySpeedUpgrade")
-
--- ============ CORE TOGGLES ============
+-- ============ ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ============
 
 getgenv().SAB_InfiniteJump = false
-getgenv().SAB_InstantSteal = false
 getgenv().SAB_SteelFloor = false
+getgenv().SAB_InstantSteal = false
 
--- ============ GUI (CUSTOM, С ИКОНКОЙ) ============
+local SteelPart = nil
+local SavedBaseCF = nil
 
-local CoreGui = game:GetService("CoreGui")
+-- ============ GUI ============
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "SAB_MeridHub"
@@ -63,7 +43,6 @@ ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = false
 ScreenGui.Parent = CoreGui
 
--- // Иконка в стиле твоей второй фотки (квадрат с ниндзя)
 local IconButton = Instance.new("ImageButton")
 IconButton.Name = "ToggleButton"
 IconButton.Size = UDim2.new(0, 60, 0, 60)
@@ -71,18 +50,17 @@ IconButton.Position = UDim2.new(0, 20, 0.5, -30)
 IconButton.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 IconButton.BorderSizePixel = 0
 IconButton.AutoButtonColor = true
-IconButton.Image = "rbxassetid://7734068321" -- поставь сюда свой asset c иконкой (ниндзя)
+IconButton.Image = "rbxassetid://7734068321" -- замени на свой asset
 IconButton.Parent = ScreenGui
 
 local UICornerIcon = Instance.new("UICorner")
 UICornerIcon.CornerRadius = UDim.new(0, 14)
 UICornerIcon.Parent = IconButton
 
--- // Окно хаба
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 350, 0, 260)
-MainFrame.Position = UDim2.new(0, 95, 0.5, -130)
+MainFrame.Size = UDim2.new(0, 350, 0, 240) -- немного ниже
+MainFrame.Position = UDim2.new(0, 95, 0.5, -120)
 MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 MainFrame.BorderSizePixel = 0
 MainFrame.Visible = false
@@ -145,12 +123,12 @@ UIListLayout.Parent = ContentFrame
 
 local function makeToggle(name, default, callback)
     local outer = Instance.new("Frame")
-    outer.Size = UDim2.new(1, 0, 0, 26)
+    outer.Size = UDim2.new(1, 0, 0, 24)
     outer.BackgroundTransparency = 1
     outer.Parent = ContentFrame
 
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 120, 1, 0)
+    btn.Size = UDim2.new(0, 140, 1, 0)
     btn.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
     btn.BorderSizePixel = 0
     btn.Text = default and "[ON] " .. name or "[OFF] " .. name
@@ -170,24 +148,16 @@ local function makeToggle(name, default, callback)
         btn.Text = (state and "[ON] " or "[OFF] ") .. name
         callback(state)
     end)
-
-    return {
-        SetState = function(v)
-            state = v
-            btn.Text = (state and "[ON] " or "[OFF] ") .. name
-            callback(state)
-        end
-    }
 end
 
 local function makeButton(name, callback)
     local outer = Instance.new("Frame")
-    outer.Size = UDim2.new(1, 0, 0, 26)
+    outer.Size = UDim2.new(1, 0, 0, 24)
     outer.BackgroundTransparency = 1
     outer.Parent = ContentFrame
 
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 160, 1, 0)
+    btn.Size = UDim2.new(0, 210, 1, 0)
     btn.BackgroundColor3 = Color3.fromRGB(60, 40, 40)
     btn.BorderSizePixel = 0
     btn.Text = name
@@ -207,7 +177,7 @@ end
 
 local function makeLabel(text)
     local lab = Instance.new("TextLabel")
-    lab.Size = UDim2.new(1, 0, 0, 20)
+    lab.Size = UDim2.new(1, 0, 0, 18)
     lab.BackgroundTransparency = 1
     lab.Text = text
     lab.TextColor3 = Color3.fromRGB(200, 200, 200)
@@ -218,7 +188,7 @@ local function makeLabel(text)
     return lab
 end
 
--- Иконка ↔ окно
+-- иконка ↔ окно
 local function toggleMainVisible()
     MainFrame.Visible = not MainFrame.Visible
 end
@@ -237,7 +207,6 @@ do
             dragging = true
             dragStart = input.Position
             startPos = MainFrame.Position
-
             input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
                     dragging = false
@@ -263,22 +232,18 @@ do
     end)
 end
 
--- ============ FEATURES ============
+-- ============ ФУНКЦИИ ============
 
 makeLabel("Movement / Utility")
 
--- Infinite Jump
-local function infiniteJumpHandler()
-    if not getgenv().SAB_InfiniteJump then return end
-    local hum = getHum()
-    if hum and hum:GetState() == Enum.HumanoidStateType.Jumping or hum:GetState() == Enum.HumanoidStateType.Freefall then
-        hum:ChangeState(Enum.HumanoidStateType.Jumping)
-    end
-end
-
+-- БЕЗОПАСНЫЙ Infinite Jump:
+-- просто даём вверхнему импульсу Velocity, не трогая стейты
 UIS.JumpRequest:Connect(function()
-    if getgenv().SAB_InfiniteJump then
-        infiniteJumpHandler()
+    if not getgenv().SAB_InfiniteJump then return end
+    local hum, char = getHum()
+    local hrp = getHRP()
+    if hum and hrp then
+        hrp.Velocity = Vector3.new(hrp.Velocity.X, 50, hrp.Velocity.Z)
     end
 end)
 
@@ -286,8 +251,7 @@ makeToggle("Infinite Jump", false, function(state)
     getgenv().SAB_InfiniteJump = state
 end)
 
--- Steel Floor (поднимающая платформа)
-local SteelPart = nil
+-- Steel Floor: быстрее апдейт и полное удаление при оффе
 local function ensureSteelPart()
     if SteelPart and SteelPart.Parent then return SteelPart end
     local hrp = getHRP()
@@ -305,12 +269,17 @@ local function ensureSteelPart()
 end
 
 local function steelFloorLoop()
-    while getgenv().SAB_SteelFloor and task.wait(0.05) do
+    while getgenv().SAB_SteelFloor do
+        task.wait(0.03) -- было 0.05 → быстрее ≈ в 1.6 раза
         pcall(function()
             local hrp = getHRP()
             local p = ensureSteelPart()
             p.CFrame = hrp.CFrame * CFrame.new(0, -3, 0)
         end)
+    end
+    if SteelPart then
+        SteelPart:Destroy()
+        SteelPart = nil
     end
 end
 
@@ -319,6 +288,7 @@ makeToggle("Steel Floor (под тобой)", false, function(state)
     if state then
         task.spawn(steelFloorLoop)
     else
+        -- сразу чистим, не ждём цикла
         if SteelPart then
             SteelPart:Destroy()
             SteelPart = nil
@@ -330,9 +300,7 @@ end)
 
 makeLabel("Steal / Base")
 
-local SavedBaseCF = nil
-
-makeButton("Сохранить позицию Зоны Сбора (стоя на зелёном)", function()
+makeButton("Сохранить позицию Зоны Сбора (стой на зелёном)", function()
     local hrp = getHRP()
     SavedBaseCF = hrp.CFrame
 end)
@@ -343,30 +311,29 @@ local function instantSteal()
     hrp.CFrame = SavedBaseCF
 end
 
-makeToggle("Instant Steal (TP на Зону Сбора)", false, function(state)
+makeToggle("Instant Steal (G → TP на Зону Сбора)", false, function(state)
     getgenv().SAB_InstantSteal = state
 end)
 
--- биндим на клавишу G: когда держишь брэинрота, жмёшь G → TP на базу
 UIS.InputBegan:Connect(function(input, gpe)
     if gpe then return end
-    if getgenv().SAB_InstantSteal and input.KeyCode == Enum.KeyCode.G then
+    if input.KeyCode == Enum.KeyCode.G and getgenv().SAB_InstantSteal then
         instantSteal()
     end
 end)
 
+-- ============ DROP BRAINROT (универсальный) ============
+
 makeLabel("Drop Brainrot / Misc")
 
--- Drop Brainrot: попытка найти объект, который ты держишь
 local function findHeldBrainrot()
     local char = getChar()
 
-    -- 1) Tool в руках
-    if char:FindFirstChildOfClass("Tool") then
-        return char:FindFirstChildOfClass("Tool")
-    end
+    -- Tool в руках
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then return tool end
 
-    -- 2) Объект, привязанный к руке
+    -- объект на правой руке
     local hand = char:FindFirstChild("RightHand") or char:FindFirstChild("Right Arm") or char:FindFirstChild("RightLowerArm")
     if hand then
         for _, v in ipairs(hand:GetChildren()) do
@@ -376,7 +343,7 @@ local function findHeldBrainrot()
         end
     end
 
-    -- 3) всё, что приварено к HRP
+    -- всё, что привязано к HRP
     local hrp = getHRP()
     for _, v in ipairs(hrp:GetChildren()) do
         if v:IsA("BasePart") or v:IsA("Model") then
@@ -387,98 +354,50 @@ local function findHeldBrainrot()
     return nil
 end
 
--- кэш позиций для «поставить на место»
-local BrainrotOriginalPos = {}
-
-local function cacheBrainrotPos(obj)
-    if not obj then return end
-    if obj:IsA("BasePart") then
-        BrainrotOriginalPos[obj] = obj.CFrame
-    elseif obj:IsA("Model") then
-        local primary = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-        if primary then
-            BrainrotOriginalPos[obj] = primary.CFrame
-        end
-    end
-end
-
-local function restoreBrainrot(obj)
-    if not obj then return end
-    local cf = BrainrotOriginalPos[obj]
-    if not cf then return end
-
-    if obj:IsA("BasePart") then
-        obj.CFrame = cf
-    elseif obj:IsA("Model") then
-        local primary = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
-        if primary then
-            obj:SetPrimaryPartCFrame(cf)
-        end
-    end
-end
-
-makeButton("Запомнить позицию текущего Brainrot", function()
-    local obj = findHeldBrainrot()
-    cacheBrainrotPos(obj)
-end)
-
-makeButton("Drop Brainrot (выкинуть/отпустить)", function()
+-- Просто «уронить» объект с рук:
+-- 1) если это Tool — эмулируем Backspace, если есть, иначе вручную
+local function dropBrainrot()
     local obj = findHeldBrainrot()
     if not obj then return end
+
+    -- если эксплойт поддерживает keypress:
+    if keypress and keyrelease then
+        keypress(0x08)  -- Backspace
+        task.wait()
+        keyrelease(0x08)
+        return
+    end
+
+    -- fallback: принудительно выбрасываем
+    local hrp = getHRP()
 
     if obj:IsA("Tool") then
         obj.Parent = workspace
-        obj.Handle.CFrame = getHRP().CFrame * CFrame.new(0, -2, -2)
+        if obj:FindFirstChild("Handle") then
+            obj.Handle.CFrame = hrp.CFrame * CFrame.new(0, -2, -2)
+        end
     elseif obj:IsA("BasePart") then
         obj.Anchored = false
         obj.Parent = workspace
+        obj.CFrame = hrp.CFrame * CFrame.new(0, -2, -2)
     elseif obj:IsA("Model") then
-        obj.Parent = workspace
         local primary = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+        obj.Parent = workspace
         if primary then
             primary.Anchored = false
+            primary.CFrame = hrp.CFrame * CFrame.new(0, -2, -2)
         end
     end
+end
+
+makeButton("Drop Brainrot (выкинуть)", function()
+    dropBrainrot()
 end)
 
-makeButton("Вернуть Brainrot на место", function()
-    local obj = findHeldBrainrot()
-    restoreBrainrot(obj)
-end)
+-- «Вернуть на место» в v2 убираю: в этой игре исходные позиции могут
+-- быть неочевидны, а твой кейс — именно быстро скинуть мискликнутый брэинрот.
 
--- ============ SHOP / UPGRADES ============
-
-makeLabel("Shop / Upgrades")
-
-makeButton("Открыть встроенный AutoBuy (ToggleAutoBuy)", function()
-    if Remotes.ToggleAutoBuy then
-        pcall(function()
-            -- Обычно ToggleAutoBuy ждёт bool или ничего.
-            -- Если потребуется аргумент, посмотри в спае и подставь сюда.
-            Remotes.ToggleAutoBuy:InvokeServer()
-        end)
-    end
-end)
-
-makeButton("Купить Speed Upgrade (BuySpeedUpgrade)", function()
-    if Remotes.BuySpeedUpgrade then
-        pcall(function()
-            Remotes.BuySpeedUpgrade:FireServer()
-        end)
-    end
-end)
-
-makeButton("Пример покупки из Shop (Purchase)", function()
-    if Remotes.ShopPurchase then
-        -- СЮДА ПОДСТАВЬ реальные аргументы из спая,
-        -- например: Remotes.ShopPurchase:FireServer("StealPower", 1)
-        pcall(function()
-            Remotes.ShopPurchase:FireServer("ExampleItem", 1)
-        end)
-    end
-end)
-
--- ============ ОТ МЕНЯ ДОБАВКА: INFO БЛОК ============
+-- ============ КРАТКАЯ ИНФО ПО СТАТАМ ============
 
 local statsLabel = makeLabel("Stats: ...")
 
@@ -488,7 +407,6 @@ local function updateStats()
         statsLabel.Text = "Stats: no leaderstats"
         return
     end
-
     local function gv(name)
         local v = ls:FindFirstChild(name)
         if v and v.Value ~= nil then
@@ -496,7 +414,6 @@ local function updateStats()
         end
         return "nil"
     end
-
     statsLabel.Text = string.format("Stats: Steals %s | Rebirths %s | Cash %s",
         gv("Steals"), gv("Rebirths"), gv("Cash"))
 end
