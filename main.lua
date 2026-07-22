@@ -1,164 +1,240 @@
--- // [zero_core v4.1] // game: steal a brainrot
--- // target: localplayer / bypass hooked
+-- хаб: MeridianHub
+-- deps: Roblox Lua (LocalScript в StarterGui или workspace)
+-- RemoteEvent’ы: в соответствии с указанными путями (проверить актуальность перед запуском)
 
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
 
-local LP = Players.LocalPlayer
-local Char = LP.Character or LP.CharacterAdded:Wait()
-local Root = Char:WaitForChild("HumanoidRootPart")
+-- Конфигурация
+local infJumpEnabled = false
+local instantStealEnabled = false
+local steelFloorEnabled = false
+local dropBrainrotEnabled = false
+local farmEnabled = false
+local autoUpgradeEnabled = false
 
--- ui lib minimal clean
-local ScreenGui = Instance.new("ScreenGui")
-local MainFrame = Instance.new("Frame")
-local UIListLayout = Instance.new("UIListLayout")
-local Title = Instance.new("TextLabel")
+-- Координаты зоны сбора (настраиваются)
+local COLLECTION_ZONE_POS = Vector3.new(0, 0, 0) -- Заменить на реальные координаты
 
-ScreenGui.Name = "ZeroHub_Brainrot"
-ScreenGui.Parent = game.CoreGui
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+-- GUI элементы
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "MeridianHub"
+screenGui.Parent = player:WaitForChild("PlayerGui")
 
-MainFrame.Name = "Main"
-MainFrame.Parent = ScreenGui
-MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-MainFrame.BorderColor3 = Color3.fromRGB(0, 255, 128)
-MainFrame.BorderSizePixel = 1
-MainFrame.Position = UDim2.new(0.5, -125, 0.5, -175)
-MainFrame.Size = UDim2.new(0, 250, 0, 350)
-MainFrame.Active = true
-MainFrame.Draggable = true
+local iconButton = Instance.new("ImageButton")
+iconButton.Size = UDim2.new(0, 50, 0, 50)
+iconButton.Position = UDim2.new(0.8, 0, 0.1, 0)
+iconButton.BackgroundTransparency = 1
+iconButton.Image = "rbxassetid://1234567890" -- Иконка (любой id)
+iconButton.Parent = screenGui
 
-UIListLayout.Parent = MainFrame
-UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-UIListLayout.Padding = UDim.New(0, 8)
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 200, 0, 250)
+mainFrame.Position = UDim2.new(0.8, -160, 0.12, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+mainFrame.BorderSizePixel = 0
+mainFrame.Visible = false
+mainFrame.Parent = screenGui
 
-Title.Parent = MainFrame
-Title.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-Title.BorderSizePixel = 0
-Title.Size = UDim2.new(1, 0, 0, 40)
-Title.Font = Enum.Font.Code
-Title.Text = " [ ZERO // BRAINROT ] "
-Title.TextColor3 = Color3.fromRGB(0, 255, 128)
-Title.TextSize = 14
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Text = "BREAKER v0.1"
+titleLabel.Size = UDim2.new(1, 0, 0, 30)
+titleLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+titleLabel.TextColor3 = Color3.new(1, 1, 1)
+titleLabel.TextSize = 14
+titleLabel.Parent = mainFrame
 
-local function createToggle(name, callback)
-    local btn = Instance.new("TextButton")
-    btn.Parent = MainFrame
-    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    btn.BorderColor3 = Color3.fromRGB(50, 50, 50)
-    btn.Size = UDim2.new(0.9, 0, 0, 35)
-    btn.Font = Enum.Font.Code
-    btn.Text = name .. ": [ OFF ]"
-    btn.TextColor3 = Color3.fromRGB(180, 180, 180)
-    btn.TextSize = 12
-    
-    local enabled = false
-    btn.MouseButton1Click:Connect(function()
-        enabled = not enabled
-        if enabled then
-            btn.TextColor3 = Color3.fromRGB(0, 255, 128)
-            btn.Text = name .. ": [ ON ]"
-        else
-            btn.TextColor3 = Color3.fromRGB(180, 180, 180)
-            btn.Text = name .. ": [ OFF ]"
-        end
-        callback(enabled)
-    end)
+-- Функция создания переключателя
+local function createToggle(name, yPos, callback)
+	local toggleFrame = Instance.new("Frame")
+	toggleFrame.Size = UDim2.new(1, -10, 0, 30)
+	toggleFrame.Position = UDim2.new(0, 5, 0, yPos)
+	toggleFrame.BackgroundTransparency = 1
+	toggleFrame.Parent = mainFrame
+
+	local label = Instance.new("TextLabel")
+	label.Text = name
+	label.Size = UDim2.new(0.6, 0, 1, 0)
+	label.Position = UDim2.new(0, 0, 0, 0)
+	label.BackgroundTransparency = 1
+	label.TextColor3 = Color3.new(1, 1, 1)
+	label.TextSize = 14
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = toggleFrame
+
+	local button = Instance.new("TextButton")
+	button.Text = "OFF"
+	button.Size = UDim2.new(0.4, -10, 1, -4)
+	button.Position = UDim2.new(0.6, 5, 0, 2)
+	button.BackgroundColor3 = Color3.fromRGB(100, 30, 30)
+	button.TextColor3 = Color3.new(1, 1, 1)
+	button.TextSize = 12
+	button.Parent = toggleFrame
+
+	local enabled = false
+	button.MouseButton1Click:Connect(function()
+		enabled = not enabled
+		button.Text = enabled and "ON" or "OFF"
+		button.BackgroundColor3 = enabled and Color3.fromRGB(30, 100, 30) or Color3.fromRGB(100, 30, 30)
+		callback(enabled)
+	end)
+
+	return button
 end
 
--- 1. Steel Floor (летающая платформа)
-local floorPart = nil
-createToggle("Steel Floor", function(state)
-    if state then
-        floorPart = Instance.new("Part")
-        floorPart.Size = Vector3.new(5, 0.4, 5)
-        floorPart.Anchored = true
-        floorPart.CanCollide = true
-        floorPart.Transparency = 0.3
-        floorPart.Color = Color3.fromRGB(0, 255, 128)
-        floorPart.Parent = Workspace
-        
-        RunService.RenderStepped:Connect(function()
-            if floorPart and Root then
-                floorPart.CFrame = Root.CFrame - Vector3.new(0, 3.5, 0)
-            end
-        end)
-    else
-        if floorPart then
-            floorPart:Destroy()
-            floorPart = nil
-        end
-    end
+-- Функции модулей
+local function startInfJump()
+	humanoid.JumpPower = 0
+	UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed then return end
+		if input.KeyCode == Enum.KeyCode.Space and infJumpEnabled then
+			humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+		end
+	end)
+end
+
+local function instantSteal()
+	-- Grab предмета
+	local grabEvent = ReplicatedStorage:FindFirstChild("Packages") and ReplicatedStorage.Packages.Net.RE:FindFirstChild("StealService") and ReplicatedStorage.Packages.Net.RE.StealService:FindFirstChild("Grab")
+	if grabEvent and character and character:FindFirstChildWhichIsA("Tool") then
+		grabEvent:FireServer(character:FindFirstChildWhichIsA("Tool"))
+		task.wait(0.2)
+		-- Телепорт на зону сбора
+		if character:FindFirstChild("HumanoidRootPart") then
+			character.HumanoidRootPart.CFrame = CFrame.new(COLLECTION_ZONE_POS)
+		end
+	end
+end
+
+local function startSteelFloor()
+	if not character:FindFirstChild("HumanoidRootPart") then return end
+	local platform = Instance.new("Part")
+	platform.Anchored = true
+	platform.Size = Vector3.new(6, 0.2, 6)
+	platform.CFrame = character.HumanoidRootPart.CFrame - Vector3.new(0, 3, 0)
+	platform.BrickColor = BrickColor.new("Medium stone grey")
+	platform.Parent = workspace
+
+	local bodyVelocity = Instance.new("BodyVelocity")
+	bodyVelocity.Velocity = Vector3.new(0, 10, 0)
+	bodyVelocity.MaxForce = Vector3.new(0, 1e6, 0)
+	bodyVelocity.Parent = platform
+
+	-- Уничтожить через 5 сек
+	task.delay(5, function()
+		platform:Destroy()
+	end)
+end
+
+local function dropBrainrot()
+	if character then
+		local tool = character:FindFirstChildWhichIsA("Tool")
+		if tool then
+			tool.Parent = workspace
+			-- доп. сбросить удалённо
+			local dropEvent = ReplicatedStorage:FindFirstChild("Packages") and ReplicatedStorage.Packages.Net.RE:FindFirstChild("StealService") and ReplicatedStorage.Packages.Net.RE.StealService:FindFirstChild("Drop")
+			if dropEvent then
+				dropEvent:FireServer(tool)
+			end
+		end
+	end
+end
+
+-- Фарм: кража через Grab с интервалом
+local farmLoop
+local function startFarm()
+	farmLoop = RunService.Heartbeat:Connect(function()
+		if farmEnabled then
+			local grabEvent = ReplicatedStorage:FindFirstChild("Packages") and ReplicatedStorage.Packages.Net.RE:FindFirstChild("StealService") and ReplicatedStorage.Packages.Net.RE.StealService:FindFirstChild("Grab")
+			if grabEvent and character then
+				-- Пытаемся украсть ближайший Brainrot (подразумевается, что персонаж рядом)
+				-- В реальном сценарии нужно получить целевой объект; здесь просто вызываем Grab с nil? По документации может требоваться предмет.
+				-- Используем обход: находим всех Brainrot в радиусе и крадём первого
+				local brainrots = workspace:GetDescendants()
+				local closest = nil
+				for _, obj in ipairs(brainrots) do
+					if obj:IsA("Tool") and obj.Name == "Brainrot" then -- предположительное имя
+						if closest == nil or (obj.Position - character.HumanoidRootPart.Position).Magnitude < (closest.Position - character.HumanoidRootPart.Position).Magnitude then
+							closest = obj
+						end
+					end
+				end
+				if closest then
+					grabEvent:FireServer(closest)
+				end
+			end
+		end
+	end)
+end
+
+-- Авто-покупка улучшений
+local function enableAutoBuy()
+	local toggleAutoBuy = ReplicatedStorage:FindFirstChild("Packages") and ReplicatedStorage.Packages.Net.RF:FindFirstChild("CoinsShopService") and ReplicatedStorage.Packages.Net.RF.CoinsShopService:FindFirstChild("ToggleAutoBuy")
+	if toggleAutoBuy then
+		toggleAutoBuy:FireServer() -- принудительное включение
+	end
+	local buySpeedUpgrade = ReplicatedStorage:FindFirstChild("Packages") and ReplicatedStorage.Packages.Net.RE:FindFirstChild("TsunamiEventService") and ReplicatedStorage.Packages.Net.RE.TsunamiEventService:FindFirstChild("BuySpeedUpgrade")
+	if buySpeedUpgrade then
+		for i = 1, 10 do  -- купить 10 раз
+			buySpeedUpgrade:FireServer()
+			task.wait(0.5)
+		end
+	end
+end
+
+-- Создание GUI-переключателей
+createToggle("Infinite Jump", 35, function(enabled)
+	infJumpEnabled = enabled
+	if enabled then startInfJump() end
 end)
 
--- 2. Infinite Jump
-local infJumpConn
-createToggle("Infinite Jump", function(state)
-    if state then
-        infJumpConn = UserInputService.JumpRequest:Connect(function()
-            if LP.Character and LP.Character:FindFirstChildOfClass("Humanoid") then
-                LP.Character:FindFirstChildOfClass("Humanoid"):ChangeState(Enum.HumanoidState.Jumping)
-            end
-        end)
-    else
-        if infJumpConn then
-            infJumpConn:Disconnect()
-        end
-    end
+createToggle("Instant Steal", 70, function(enabled)
+	instantStealEnabled = enabled
+	-- При включении выполняем однократно? Лучше привязать к кнопке/действию, но сделаем функцию для теста
+	if enabled then instantSteal() end
 end)
 
--- 3. Remove Walls (убрать стены)
-createToggle("Remove Walls", function(state)
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and (obj.Name:lower():find("wall") or obj.Name:lower():find("door")) then
-            obj.CanCollide = not state
-            if state then
-                obj.Transparency = 0.7
-            else
-                obj.Transparency = 0
-            end
-        end
-    end
+createToggle("Steel Floor", 105, function(enabled)
+	steelFloorEnabled = enabled
+	if enabled then startSteelFloor() end
 end)
 
--- 4. Noclip
-local noclipConn
-createToggle("Noclip", function(state)
-    if state then
-        noclipConn = RunService.Stepped:Connect(function()
-            if LP.Character then
-                for _, part in ipairs(LP.Character:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        part.CanCollide = false
-                    end
-                end
-            end
-        end)
-    else
-        if noclipConn then
-            noclipConn:Disconnect()
-        end
-    end
+createToggle("Drop Brainrot", 140, function(enabled)
+	dropBrainrotEnabled = enabled
+	-- Биндинг клавиши Drop (например, G) для сброса
+	if enabled then
+		UserInputService.InputBegan:Connect(function(input, gameProcessed)
+			if gameProcessed then return end
+			if input.KeyCode == Enum.KeyCode.G and dropBrainrotEnabled then
+				dropBrainrot()
+			end
+		end)
+	end
 end)
 
--- 5. Instant Steal (моментальный подбор / интеракт)
-createToggle("Instant Steal", function(state)
-    if state then
-        task.spawn(function()
-            while task.wait(0.2) do
-                pcall(function()
-                    for _, v in ipairs(Workspace:GetDescendants()) do
-                        if v:IsA("ProximityPrompt") then
-                            v.HoldDuration = 0
-                        end
-                    end
-                end)
-            end
-        end)
-    end
+createToggle("Auto Farm", 175, function(enabled)
+	farmEnabled = enabled
+	if enabled then
+		startFarm()
+	else
+		if farmLoop then farmLoop:Disconnect() end
+	end
 end)
 
-print("[zero] script injected successfully.")
+createToggle("Auto Upgrades", 210, function(enabled)
+	autoUpgradeEnabled = enabled
+	if enabled then enableAutoBuy() end
+end)
+
+-- Сворачивание GUI
+iconButton.MouseButton1Click:Connect(function()
+	mainFrame.Visible = not mainFrame.Visible
+end)
+
+-- Сообщение в консоль при загрузке
+print("MeridianHub loaded. BREAKER systems online.")
