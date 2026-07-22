@@ -1,59 +1,64 @@
--- // [zero_core v4.1] // game: steal a brainrot
+-- // [zero_core v4.2] // game: steal a brainrot
 -- // target: localplayer / bypass hooked
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
+local CoreGui = game:GetService("CoreGui")
 
 local LP = Players.LocalPlayer
 local Char = LP.Character or LP.CharacterAdded:Wait()
 local Root = Char:WaitForChild("HumanoidRootPart")
 
--- ui lib minimal clean
-local ScreenGui = Instance.new("ScreenGui")
-local MainFrame = Instance.new("Frame")
-local UIListLayout = Instance.new("UIListLayout")
-local Title = Instance.new("TextLabel")
+local gethui = gethui or function() return CoreGui end
 
+-- UI Core
+local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "ZeroHub_Brainrot"
-ScreenGui.Parent = game.CoreGui
+ScreenGui.Parent = gethui()
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
+local MainFrame = Instance.new("Frame")
 MainFrame.Name = "Main"
 MainFrame.Parent = ScreenGui
-MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 MainFrame.BorderColor3 = Color3.fromRGB(0, 255, 128)
-MainFrame.BorderSizePixel = 1
+MainFrame.BorderSizePixel = 2
 MainFrame.Position = UDim2.new(0.5, -125, 0.5, -175)
-MainFrame.Size = UDim2.new(0, 250, 0, 350)
+MainFrame.Size = UDim2.new(0, 250, 0, 320)
 MainFrame.Active = true
 MainFrame.Draggable = true
+MainFrame.ZIndex = 1
 
+local UIListLayout = Instance.new("UIListLayout")
 UIListLayout.Parent = MainFrame
 UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-UIListLayout.Padding = UDim.New(0, 8)
+UIListLayout.Padding = UDim.new(0, 6)
 
+local Title = Instance.new("TextLabel")
 Title.Parent = MainFrame
-Title.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Title.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 Title.BorderSizePixel = 0
-Title.Size = UDim2.new(1, 0, 0, 40)
-Title.Font = Enum.Font.Code
-Title.Text = " [ ZERO // BRAINROT ] "
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.Font = Enum.Font.SourceSansBold
+Title.Text = "ZERO // BRAINROT"
 Title.TextColor3 = Color3.fromRGB(0, 255, 128)
-Title.TextSize = 14
+Title.TextSize = 16
+Title.ZIndex = 2
 
 local function createToggle(name, callback)
     local btn = Instance.new("TextButton")
     btn.Parent = MainFrame
-    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    btn.BorderColor3 = Color3.fromRGB(50, 50, 50)
+    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    btn.BorderColor3 = Color3.fromRGB(60, 60, 60)
     btn.Size = UDim2.new(0.9, 0, 0, 35)
-    btn.Font = Enum.Font.Code
+    btn.Font = Enum.Font.SourceSansBold
     btn.Text = name .. ": [ OFF ]"
-    btn.TextColor3 = Color3.fromRGB(180, 180, 180)
-    btn.TextSize = 12
+    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    btn.TextSize = 14
+    btn.ZIndex = 2
     
     local enabled = false
     btn.MouseButton1Click:Connect(function()
@@ -62,14 +67,14 @@ local function createToggle(name, callback)
             btn.TextColor3 = Color3.fromRGB(0, 255, 128)
             btn.Text = name .. ": [ ON ]"
         else
-            btn.TextColor3 = Color3.fromRGB(180, 180, 180)
+            btn.TextColor3 = Color3.fromRGB(200, 200, 200)
             btn.Text = name .. ": [ OFF ]"
         end
         callback(enabled)
     end)
 end
 
--- 1. Steel Floor (летающая платформа)
+-- 1. Steel Floor
 local floorPart = nil
 createToggle("Steel Floor", function(state)
     if state then
@@ -110,16 +115,12 @@ createToggle("Infinite Jump", function(state)
     end
 end)
 
--- 3. Remove Walls (убрать стены)
+-- 3. Remove Walls
 createToggle("Remove Walls", function(state)
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj:IsA("BasePart") and (obj.Name:lower():find("wall") or obj.Name:lower():find("door")) then
             obj.CanCollide = not state
-            if state then
-                obj.Transparency = 0.7
-            else
-                obj.Transparency = 0
-            end
+            obj.Transparency = state and 0.7 or 0
         end
     end
 end)
@@ -144,7 +145,7 @@ createToggle("Noclip", function(state)
     end
 end)
 
--- 5. Instant Steal (моментальный подбор / интеракт)
+-- 5. Instant Steal
 createToggle("Instant Steal", function(state)
     if state then
         task.spawn(function()
@@ -160,5 +161,3 @@ createToggle("Instant Steal", function(state)
         end)
     end
 end)
-
-print("[zero] script injected successfully.")
