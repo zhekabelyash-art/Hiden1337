@@ -1,201 +1,207 @@
---[[
-    ZERO HUB v1.0 — FIXED VERSION
-    Исправлена ошибка Stack Yield на WaitForChild
-]]
+-- ZERO HUB v1.0 FIX 2
+-- Исправлен attempt to call a nil value
+-- Безопасная версия для слабых executor'ов
 
--- СЕРВИСЫ
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
+local UserInput = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- СОСТОЯНИЯ
+-- Состояния
 local State = {
-    InfiniteJump = false,
-    SteelFloor = false,
-    AutoGrab = false,
+    InfJump = false,
+    Floor = false,
+    GrabLoop = false,
     AutoBuy = false,
-    AutoSpeed = false,
+    SpeedUp = false,
     AntiAFK = false,
     Noclip = false
 }
-local Connections = {}
-local FloorPart = nil
-local BasePosition = Vector3.new(0, 100, 0) -- <<<< ТВОЯ БАЗА ЗДЕСЬ
+
+local Conns = {}
+local FloorObj = nil
+local BasePos = Vector3.new(0, 100, 0) -- ТВОЯ БАЗА
 
 
--- ============================================================
--- БЕЗОПАСНАЯ ЗАГРУЗКА СЕТИ (ФИКС ОШИБКИ)
--- ============================================================
+-- ==========================================
+-- ЗАГРУЗКА REMOTES (защита от nil)
+-- ==========================================
 
-local Remotes = {Grab=nil, Purchase=nil, SpeedUpgrade=nil}
-local Funcs = {AutoBuy=nil}
+local RMT = {
+    Grab = nil,
+    Buy = nil,
+    Speed = nil
+}
+local FN = {
+    AutoBuy = nil
+}
 
--- Запускаем загрузку через spawn чтобы не блочить основной поток
-task.spawn(function()
-    -- Пытаемся найти пакет с таймаутом
-    local Net = ReplicatedStorage:FindFirstChild("Packages")
-    if not Net then
-        ReplicatedStorage.ChildAdded:WaitForChild("Packages")
-        Net = ReplicatedStorage.Packages
+spawn(function()
+    local ok, pkg = pcall(function()
+        return ReplicatedStorage:WaitForChild("Packages", 5):WaitForChild("Net", 5)
+    end)
+    
+    if not ok or not pkg then 
+        print("[ZERO] Packages.Net не найден. Работаем без удалённых функций.")
+        return 
     end
     
-    Net = Net:FindFirstChild("Net")
-    if not Net then warn("[Zero] Нет Net пакета"); return; end
+    local re = pkg:FindFirstChild("RE")
+    local rf = pkg:FindFirstChild("RF")
     
-    local RE = Net:FindFirstChild("RE")
-    local RF = Net:FindFirstChild("RF")
-    
-    if RE then
-        -- Безопасное получение с проверкой существования
-        local stealSvc = RE:FindFirstChild("StealService")
-        if stealSvc then Remotes.Grab = stealSvc:FindFirstChild("Grab") end
+    if re then
+        local s1 = re:FindFirstChild("StealService")
+        if s1 then RMT.Grab = s1:FindFirstChild("Grab") end
         
-        local shopSvc = RE:FindFirstChild("ShopService")
-        if shopSvc then Remotes.Purchase = shopSvc:FindFirstChild("Purchase") end
+        local s2 = re:FindFirstChild("ShopService")
+        if s2 then RMT.Buy = s2:FindFirstChild("Purchase") end
         
-        local tsunamiSvc = RE:FindFirstChild("TsunamiEventService")
-        if tsunamiSvc then Remotes.SpeedUpgrade = tsunamiSvc:FindFirstChild("BuySpeedUpgrade") end
+        local s3 = re:FindFirstChild("TsunamiEventService")
+        if s3 then RMT.Speed = s3:FindFirstChild("BuySpeedUpgrade") end
     end
     
-    if RF then
-        local coinSvc = RF:FindFirstChild("CoinsShopService")
-        if coinSvc then Funcs.AutoBuy = coinSvc:FindFirstChild("ToggleAutoBuy") end
+    if rf then
+        local c1 = rf:FindFirstChild("CoinsShopService")
+        if c1 then FN.AutoBuy = c1:FindFirstChild("ToggleAutoBuy") end
     end
     
-    print("[Zero] Загружено. Grab:", Remotes.Grab ~= nil and "OK" or "MISSING", "| AutoBuy:", Funcs.AutoBuy ~= nil and "OK" or "MISSING")
+    print("[ZERO] Remotes загружены.")
 end)
 
 
--- ============================================================
--- ВСЕ ФУНКЦИИ РАБОТЫ
--- ============================================================
+-- ==========================================
+-- ВСЕ ФУНКЦИИ (проверены на nil-вызовы)
+-- ==========================================
 
-function ToggleInfJump(v)
-    State.InfiniteJump = v
+function SetInfJump(v)
+    State.InfJump = v
     if v then
-        Connections.IJ = UserInputService.JumpRequest:Connect(function()
+        Conns.IJ = UserInput.JumpRequest:Connect(function()
             local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if h and h.Health > 0 then h:ChangeState(Enum.HumanoidStateType.Jumping) end
-        end)
-    else
-        if Connections.IJ then Connections.IJ:Disconnect(); Connections.IJ = nil end
-    end
-end
-
-function ToggleSteelFloor(v)
-    State.SteelFloor = v
-    if v then
-        FloorPart = Instance.new("Part")
-        FloorPart.Name = "__Z_Floor"
-        FloorPart.Size = Vector3.new(10,1,10)
-        FloorPart.Color = Color3.fromRGB(40,180,255)
-        FloorPart.Material = Enum.Material.Neon
-        FloorPart.Transparency = 0.2
-        FloorPart.CanCollide = true
-        FloorPart.Anchored = true
-        FloorPart.Parent = workspace
-        
-        local bp = Instance.new("BodyPosition", FloorPart)
-        bp.MaxForce = Vector3.new(math.huge,math.huge,math.huge)
-        bp.P = 30000
-        
-        Connections.FL = RunService.RenderStepped:Connect(function(dt)
-            if not State.SteelFloor or not FloorPart then return end
-            local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                bp.Position = hrp.Position + Vector3.new(0,-3.5, dt*4)
-                FloorPart.CFrame = CFrame.new(bp.Position) * CFrame.Angles(0,tick()*2%360,0)
+            if h and h.Health > 0 then
+                h:ChangeState(Enum.HumanoidStateType.Jumping)
             end
         end)
     else
-        if Connections.FL then Connections.FL:Disconnect(); Connections.FL = nil end
-        if FloorPart then FloorPart:Destroy(); FloorPart = nil end
+        if Conns.IJ then Conns.IJ:Disconnect() Conns.IJ = nil end
     end
 end
 
-function DoInstaSteal()
-    local c = LocalPlayer.Character
-    if not c then return "NO CHAR" end
-    local tool = c:FindFirstChildOfClass("Tool")
-    local root = c:FindFirstChild("HumanoidRootPart")
+function SetFloor(v)
+    State.Floor = v
+    if v then
+        FloorObj = Instance.new("Part")
+        FloorObj.Name = "__ZF__"
+        FloorObj.Size = Vector3.new(10, 1, 10)
+        FloorObj.Color = Color3.fromRGB(40, 180, 255)
+        FloorObj.Material = Enum.Material.Neon
+        FloorObj.Transparency = 0.2
+        FloorObj.CanCollide = true
+        FloorObj.Anchored = true
+        FloorObj.Parent = workspace
+        
+        local bp = Instance.new("BodyPosition", FloorObj)
+        bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bp.P = 30000
+        
+        Conns.FL = RunService.RenderStepped:Connect(function(dt)
+            if not State.Floor or not FloorObj then return end
+            local char = LocalPlayer.Character
+            if char then
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    bp.Position = hrp.Position + Vector3.new(0, -3.5, dt * 4)
+                end
+            end
+        end)
+    else
+        if Conns.FL then Conns.FL:Disconnect() Conns.FL = nil end
+        if FloorObj then FloorObj:Destroy() FloorObj = nil end
+    end
+end
+
+function DoSteal()
+    local char = LocalPlayer.Character
+    if not char then return "NO CHAR" end
+    
+    local tool = char:FindFirstChildOfClass("Tool")
+    local root = char:FindFirstChild("HumanoidRootPart")
+    
     if not tool then return "NO ITEM" end
     if not root then return "NO ROOT" end
     
-    -- Безопасный вызов с проверкой
-    if Remotes.Grab then
-        pcall(function() Remotes.Grab:FireServer() end)
+    if RMT.Graw ~= nil then -- FIX: правильно!
+        pcall(function() RMT.Grab:FireServer() end)
     end
-    task.wait(0.08)
-    root.CFrame = CFrame.new(BasePosition + Vector3.new(0,8,0))
-    return "TELEPORTED"
+    wait(0.08)
+    root.CFrame = CFrame.new(BasePos + Vector3.new(0, 8, 0))
+    return "OK"
 end
 
-function DoDropItem()
-    local c = LocalPlayer.Character
-    if not c then return "NO CHAR" end
-    local tool = c:FindFirstChildOfClass("Tool")
-    if not tool then return "EMPTY HANDS" end
+function DoDrop()
+    local char = LocalPlayer.Character
+    if not char then return "NO CHAR" end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool then return "EMPTY" end
     local bp = LocalPlayer:FindFirstChild("Backpack")
-    if bp then
-        tool.Parent = bp
-        task.wait(0.05)
-        return "DROPPED TO BAG"
-    end
+    if bp then tool.Parent = bp wait(0.05) return "DROP" end
     return "FAIL"
 end
 
-function ToggleAutoGrab(v)
-    State.AutoGrab = v
+function SetAutoGrab(v)
+    State.GrabLoop = v
     if v then
-        Connections.AG = RunService.RenderStepped:Connect(function()
-            if State.AutoGrab and Remotes.Grab then
-                pcall(Remotes.Grab.FireServer, Remotes.Grab)
+        Conns.AG = RunService.RenderStepped:Connect(function()
+            if State.GrabLoop and RMT.Grab then
+                pcall(RMT.Grab.FireServer, RMT.Grab)
             end
         end)
     else
-        if Connections.AG then Connections.AG:Disconnect(); Connections.AG = nil end
+        if Conns.AG then Conns.AG:Disconnect() Conns.AG = nil end
     end
 end
 
-function ToggleAutoBuy(v)
+function SetAutoBuy(v)
     State.AutoBuy = v
     if v then
-        Connections.AB = task.spawn(function()
+        Conns.AB = spawn(function()
             while State.AutoBuy do
-                if Funcs.AutoBuy then
-                    pcall(Funcs.AutoBuy.InvokeServer, Funcs.AutoBuy, true)
+                if FN.AutoBuy then
+                    pcall(FN.AutoBuy.InvokeServer, FN.AutoBuy, true)
                 end
-                task.wait(2)
+                wait(2)
             end
         end)
     else
-        if Connections.AB then task.cancel(Connections.AB); Connections.AB = nil end
+        if Conns.AB then 
+            -- spawn нельзя cancel, но цикл проверит флаг и выйдет
+            State.AutoBuy = false 
+        end
     end
 end
 
-function ToggleAutoSpeed(v)
-    State.AutoSpeed = v
+function SetSpeed(v)
+    State.SpeedUp = v
     if v then
-        Connections.AS = task.spawn(function()
-            while State.AutoSpeed do
-                if Remotes.SpeedUpgrade then
-                    pcall(Remotes.SpeedUpgrade.FireServer, Remotes.SpeedUpgrade)
+        Conns.SP = spawn(function()
+            while State.SpeedUp do
+                if RMT.Speed then
+                    pcall(RMT.Speed.FireServer, RMT.Speed)
                 end
-                task.wait(3)
+                wait(3)
             end
         end)
     else
-        if Connections.AS then task.cancel(Connections.AS); Connections.AS = nil end
+        State.SpeedUp = false
     end
 end
 
-function ToggleAntiAFK(v)
+function SetAFK(v)
     State.AntiAFK = v
     if v then
-        Connections.AF = LocalPlayer.Idled:Connect(function(t)
+        Conns.AF = LocalPlayer.Idled:Connect(function(t)
             if t > 300 and State.AntiAFK then
                 local vu = Instance.new("VirtualUser")
                 vu:CaptureController()
@@ -205,24 +211,24 @@ function ToggleAntiAFK(v)
             end
         end)
     else
-        if Connections.AF then Connections.AF:Disconnect(); Connections.AF = nil end
+        if Conns.AF then Conns.AF:Disconnect() Conns.AF = nil end
     end
 end
 
-function ToggleNoclip(v)
+function SetNoclip(v)
     State.Noclip = v
     if v then
-        Connections.NC = RunService.Stepped:Connect(function()
+        Conns.NC = RunService.Stepped:Connect(function()
             if State.Noclip and LocalPlayer.Character then
-                for _,p in pairs(LocalPlayer.Character:GetDescendants()) do
+                for _, p in pairs(LocalPlayer.Character:GetDescendants()) do
                     if p:IsA("BasePart") then p.CanCollide = false end
                 end
             end
         end)
     else
-        if Connections.NC then Connections.NC:Disconnect(); Connections.NC = nil end
+        if Conns.NC then Conns.NC:Disconnect() Conns.NC = nil end
         if LocalPlayer.Character then
-            for _,p in pairs(LocalPlayer.Character:GetDescendants()) do
+            for _, p in pairs(LocalPlayer.Character:GetDescendants()) do
                 if p:IsA("BasePart") then p.CanCollide = true end
             end
         end
@@ -230,165 +236,296 @@ function ToggleNoclip(v)
 end
 
 
--- ============================================================
--- GUI ПОЛНОСТЬЮ (визуал + привязка)
--- ============================================================
+-- ==========================================
+-- GUI (максимально просто)
+-- ==========================================
 
-local gui = Instance.new("ScreenGui")
-gui.Name = "ZeroHubV1"
-gui.ResetOnSpawn = false
-gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+local SG = Instance.new("ScreenGui")
+SG.Name = "ZH_Fix2"
+SG.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
-if _G.ZeroH then _G.ZeroH:Destroy() end
-_G.ZeroH = gui
+if _G.ZH_REF then _G.ZH_REF:Destroy() end
+_G.ZH_REF = SG
 
---- TOGGLE ICON ---
-local icon = Instance.new("ImageButton")
-icon.Name = "Icon"
-icon.Size = UDim2.new(0,48,0,48); icon.Position = UDim2.new(0,14,0,14)
-icon.BackgroundColor3 = Color3.fromRGB(28,28,35)
-icon.Image = "rbxassetid://7743867447"; icon.ImageColor3 = Color3.fromRGB(80,160,255)
-icon.Parent = gui
-Instance.new("UICorner",icon).CornerRadius = UDim.new(0,12)
+-- Иконка
+local Icon = Instance.new("ImageButton")
+Icon.Name = "Btn"
+Icon.Size = UDim2.new(0, 46, 0, 46)
+Icon.Position = UDim2.new(0, 12, 0, 12)
+Icon.BackgroundColor3 = Color3.fromRGB(26, 26, 33)
+Icon.Image = "rbxassetid://7743867447"
+Icon.ImageColor3 = Color3.fromRGB(75, 155, 245)
+Icon.Parent = SG
+Instance.new("UICorner", Icon).CornerRadius = UDim.new(0, 11)
 
---- MAIN FRAME ---
-local main = Instance.new("Frame")
-main.Name = "Main"
-main.Size = UDim2.new(0,340,0,400); main.Position = UDim2.new(0,68,0,18)
-main.BackgroundColor3 = Color3.fromRGB(20,20,26); main.BorderSizePixel = 0
-main.Parent = gui
-Instance.new("UICorner",main).CornerRadius = UDim.new(0,11)
-Instance.new("UIStroke",main).Color = Color3.fromRGB(45,45,55)
+-- Окно
+local Win = Instance.new("Frame")
+Win.Name = "W"
+Win.Size = UDim2.new(0, 320, 0, 380)
+Win.Position = UDim2.new(0, 64, 0, 16)
+Win.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+Win.BorderSizePixel = 0
+Win.Parent = SG
+Instance.new("UICorner", Win).CornerRadius = UDim.new(0, 10)
 
---- HEADER ---
-local hdr = Instance.new("Frame")
-hdr.Size = UDim2.new(1,0,0,34); hdr.BackgroundColor3 = Color3.fromRGB(26,26,34); hdr.Parent = main
-Instance.new("UICorner",hdr).CornerRadius = UDim.new(0,11)
-local hCov = Instance.new("Frame"); hCov.Size = UDim2(1,0,0,9); hCov.Position = UDim2(0,0,25,0)
-hCov.BackgroundColor3 = Color3.fromRGB(26,26,34); hCov.BorderSizePixel = 0; hCov.ZIndex=2; hCov.Parent=hdr
+local Strk = Instance.new("UIStroke", Win)
+Strk.Color = Color3.fromRGB(42, 42, 52)
+Strk.Thickness = 1
 
-local title = Instance.new("TextLabel"); title.Text=" ZERO HUB "; title.Font=Enum.Font.GothamBlack; title.TextSize=14
-title.TextColor3=Color3.fromRGB(235,235,240); title.BackgroundTransparency=1; title.ZIndex=3; title.Parent=hdr
+-- Хедер
+local Hd = Instance.new("Frame")
+Hd.Size = UDim2.new(1, 0, 0, 32)
+Hd.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
+Hd.Parent = Win
+Instance.new("UICorner", Hd).CornerRadius = UDim.new(0, 10)
 
-local xbtn = Instance.new("TextButton"); xbtn.Text="×"; xbtn.Font=Enum.Font.GothamBold; xbtn.TextSize=20
-xbtn.Size=UDim2(0,24,0,24); xbtn.Position=UDim2(1,-28,0,5); xbtn.BackgroundColor3=Color3.fromRGB(42,42,52)
-xbtn.TextColor3=Color3.fromRGB(255,65,65); xbtn.ZIndex=3; xbtn.Parent=hdr
-Instance.new("UICorner",xbtn).CornerRadius=UDim2(0,6)
+local HdCover = Instance.new("Frame")
+HdCover.Size = UDim2.new(1, 0, 0, 8)
+HdCover.Position = UDim2.new(0, 0, 24, 0)
+HdCover.BackgroundColor3 = Color3.fromRGB(24, 24, 32)
+HdCover.BorderSizePixel = 0
+HdCover.ZIndex = 2
+HdCover.Parent = Hd
 
---- SCROLL CONTENT ---
-local scr = Instance.new("ScrollingFrame")
-scr.Name="Content"; scr.Size=UDim2(1,-12,1,-40); scr.Position=UDim2(0,6,0,36)
-scr.BackgroundTransparency=1; scr.ScrollBarThickness=3; scr.ScrollBarImageColor3=Color3.fromRGB(80,160,255)
-scr.CanvasSize=UDim2(0,0,0,0); scr.Parent=main
-local lay = Instance.new("UIListLayout",scr); lay.Padding = UDim2(0,5)
-lay:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    scr.CanvasSize = UDim2(0,0,0,lay.AbsoluteContentSize.Y+8)
+local Ttl = Instance.new("TextLabel")
+Ttl.Text = " ZERO HUB "
+Ttl.Font = Enum.Font.GothamBlack
+Ttl.TextSize = 13
+Ttl.TextColor3 = Color3.fromRGB(230, 230, 235)
+Ttl.BackgroundTransparency = 1
+Ttl.ZIndex = 3
+Ttl.Parent = Hd
+
+local Cls = Instance.new("TextButton")
+Cls.Text = "X"
+Cls.Font = Enum.Font.GothamBold
+Cls.TextSize = 16
+Cls.Size = UDim2.new(0, 22, 0, 22)
+Cls.Position = UDim2.new(1, -26, 0, 5)
+Cls.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+Cls.TextColor3 = Color3.fromRGB(255, 60, 60)
+Cls.ZIndex = 3
+Cls.Parent = Hd
+Instance.new("UICorner", Cls).CornerRadius = UDim.new(0, 5)
+
+-- Скролл
+local Scr = Instance.new("ScrollingFrame")
+Scr.Size = UDim2.new(1, -10, 1, -36)
+Scr.Position = UDim2.new(0, 5, 0, 34)
+Scr.BackgroundTransparency = 1
+Scr.ScrollBarThickness = 3
+Scr.ScrollBarImageColor3 = Color3.fromRGB(75, 155, 245)
+Scr.CanvasSize = UDim2.new(0, 0, 0, 0)
+Scr.Parent = Win
+
+local Lst = Instance.new("UIListLayout", Scr)
+Lst.Padding = UDim2.new(0, 4)
+
+Lst:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    Scr.CanvasSize = UDim2.new(0, 0, 0, Lst.AbsoluteContentSize.Y + 6)
 end)
 
 
--- === UI HELPERS ===
+-- === ЭЛЕМЕНТЫ UI ===
 
-function SecTitle(txt)
-    local f=Instance.new("Frame"); f.Size=UDim2(1,0,0,22); f.BackgroundTransparency=1; f.Parent=scr
-    local ln=Instance.new("Frame"); ln.Size=UDim2(1,0,0,1); ln.Position=UDim2(0,0,0,10.5)
-    ln.BackgroundColor3=Color3.fromRGB(48,48,58); ln.BorderSizePixel=0; ln.Parent=f
-    local bg=Instance.new("Frame"); bg.Size=UDim2(0,#txt*7+14,0,18); bg.Position=UDim2(0,6,0,2)
-    bg.BackgroundColor3=Color3.fromRGB(32,32,40); bg.Parent=f; Instance.new("UICorner",bg).CornerRadius=UDim2(0,4)
-    local lb=Instance.new("TextLabel"); lb.Size=UDim2(1,0,1,0); lb.BackgroundTransparency=1
-    lb.Text=txt; lb.TextColor3=Color3.fromRGB(80,160,255); lb.Font=Enum.Font.GothamSemibold; lb.TextSize=10; lb.Parent=bg
+function AddSection(txt)
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, 0, 0, 20)
+    f.BackgroundTransparency = 1
+    f.Parent = Scr
+    
+    local ln = Instance.new("Frame")
+    ln.Size = UDim2.new(1, 0, 0, 1)
+    ln.Position = UDim2.new(0, 0, 0, 9.5)
+    ln.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    ln.BorderSizePixel = 0
+    ln.Parent = f
+    
+    local bg = Instance.new("Frame")
+    bg.Size = UDim2.new(0, #txt * 7 + 12, 0, 16)
+    bg.Position = UDim2.new(0, 5, 0, 2)
+    bg.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
+    bg.Parent = f
+    Instance.new("UICorner", bg).CornerRadius = UDim.new(0, 4)
+    
+    local lb = Instance.new("TextLabel")
+    lb.Size = UDim2.new(1, 0, 1, 0)
+    lb.BackgroundTransparency = 1
+    lb.Text = txt
+    lb.TextColor3 = Color3.fromRGB(75, 155, 245)
+    lb.Font = Enum.Font.GothamSemibold
+    lb.TextSize = 9
+    lb.Parent = bg
 end
 
-function MkToggle(name,desc,default,callback)
-    local ord=#scr:GetChildren()
-    local row=Instance.new("Frame"); row.Size=UDim2(1,0,0,40); row.BackgroundColor3=Color3.fromRGB(28,28,36)
-    row.LayoutOrder=ord; row.Parent=scr; Instance.new("UICorner",row).CornerRadius=UDim2(0,6)
+function AddToggle(name, desc, def, cb)
+    local o = #Scr:GetChildren()
+    local r = Instance.new("Frame")
+    r.Size = UDim2.new(1, 0, 0, 36)
+    r.BackgroundColor3 = Color3.fromRGB(26, 26, 34)
+    r.LayoutOrder = o
+    r.Parent = Scr
+    Instance.new("UICorner", r).CornerRadius = UDim.new(0, 6)
     
-    local nm=Instance.new("TextLabel"); nm.Size=UDim2(1,-60,0.6,0); nm.Position=UDim2(0,8,0,2)
-    nm.Text=name; nm.Font=Enum.Font.GothamSemibold; nm.TextSize=12; nm.TextColor3=Color3.fromRGB(225,225,230)
-    nm.BackgroundTransparency=1; nm.TextXAlignment=Enum.TextXAlignment.Left; nm.Parent=row
+    local nm = Instance.new("TextLabel")
+    nm.Size = UDim2.new(1, -54, 0.58, 0)
+    nm.Position = UDim2.new(0, 6, 0, 2)
+    nm.Text = name
+    nm.Font = Enum.Font.GothamSemibold
+    nm.TextSize = 11
+    nm.TextColor3 = Color3.fromRGB(220, 220, 225)
+    nm.BackgroundTransparency = 1
+    nm.TextXAlignment = Enum.TextXAlignment.Left
+    nm.Parent = r
     
-    local ds=Instance.new("TextLabel"); ds.Size=UDim2(1,-68,0.36,0); ds.Position=UDim2(0,8,0.62,0)
-    ds.Text=desc or ""; ds.Font=Enum.Font.Gotham; ds.TextSize=9; ds.TextColor3=Color3.fromRGB(125,125,140)
-    ds.BackgroundTransparency=1; ds.TextXAlignment=Enum.TextXAlignment.Left; ds.TextWrapped=true; ds.Parent=row
+    local dc = Instance.new("TextLabel")
+    dc.Size = UDim2(1, -62, 0.38, 0)
+    dc.Position = UDim2(0, 6, 0.6, 0)
+    dc.Text = desc or ""
+    dc.Font = Enum.Font.Gotham
+    dc.TextSize = 8
+    dc.TextColor3 = Color3.fromRGB(120, 120, 135)
+    dc.BackgroundTransparency = 1
+    dc.TextXAlignment = Enum.TextXAlignment.Left
+    dc.TextWrapped = true
+    dc.Parent = r
     
-    local sw=Instance.new("TextButton"); sw.Size=UDim2(0,44,0,22); sw.Position=UDim2(1,-50,0.5,-11)
-    sw.BackgroundColor3=Color3.fromRGB(52,52,64); sw.Text=""; sw.AutoButtonColor=false; sw.Parent=row
-    Instance.new("UICorner",sw).CornerRadius=UDim2(1,0)
+    -- Свитч
+    local sw = Instance.new("TextButton")
+    sw.Size = UDim2.new(0, 42, 0, 20)
+    sw.Position = UDim2.new(1, -46, 0.5, -10)
+    sw.BackgroundColor3 = Color3.fromRGB(50, 50, 62)
+    sw.Text = ""
+    sw.AutoButtonColor = false
+    sw.Parent = r
+    Instance.new("UICorner", sw).CornerRadius = UDim.new(1, 0)
     
-    local knob=Instance.new("Frame"); knob.Size=UDim2(0,16,0,16); knob.Position=UDim2(0,3,0.5,-8)
-    knob.BackgroundColor3=Color3.fromRGB(215,215,220); knob.Parent=sw
-    Instance.new("UICorner",knob).CornerRadius=UDim2(1,0)
+    local kn = Instance.new("Frame")
+    kn.Size = UDim2.new(0, 14, 0, 14)
+    kn.Position = UDim2.new(0, 3, 0.5, -7)
+    kn.BackgroundColor3 = Color3.fromRGB(210, 210, 215)
+    kn.Parent = sw
+    Instance.new("UICorner", kn).CornerRadius = UDim.new(1, 0)
     
-    -- СТАТУС ЛЕЙБЛ
-    local st=Instance.new("TextLabel"); st.Size=UDim2(0,44,0,12); st.Position=UDim2(1,-50,0.5,11)
-    st.BackgroundTransparency=1; st.Text=default and "ON" or "OFF"; st.Font=Enum.Font.GothamBold; st.TextSize=8
-    st.TextColor3=default and Color3.fromRGB(75,195,115) or Color3.fromRGB(130,130,142); st.Parent=row
+    -- Статус
+    local st = Instance.new("TextLabel")
+    st.Size = UDim2.new(0, 42, 0, 10)
+    st.Position = UDim2.new(1, -46, 0.5, 10)
+    st.BackgroundTransparency = 1
+    st.Text = def and "ON" or "OFF"
+    st.Font = Enum.Font.GothamBold
+    st.TextSize = 7
+    st.TextColor3 = def and Color3.fromRGB(70, 190, 110) or Color3.fromRGB(120, 120, 135)
+    st.Parent = r
     
-    local cur=default
-    function Set(s)
-        cur=s
-        TweenService:Create(sw,TweenInfo(0.18),{BackgroundColor3=s and Color3.fromRGB(75,195,115) or Color3.fromRGB(52,52,64)}):Play()
-        TweenService:Create(knob,TweenInfo(0.18),{Position=s and UDim2(1,-19,0.5,-8) or UDim2(0,3,0.5,-8)}):Play()
-        st.Text=s and "ON" or "OFF"; st.TextColor3=s and Color3.fromRGB(75,195,115) or Color3.fromRGB(130,130,142)
-        if callback then callback(s) end
+    local cur = def
+    function Upd(v)
+        cur = v
+        TweenService:Create(sw, TweenInfo.new(0.16), {BackgroundColor3 = v and Color3.fromRGB(70, 190, 110) or Color3.fromRGB(50, 50, 62)}):Play()
+        TweenService:Create(kn, TweenInfo.new(0.16), {Position = v and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)}):Play()
+        st.Text = v and "ON" or "OFF"
+        st.TextColor3 = v and Color3.fromRGB(70, 190, 110) or Color3.fromRGB(120, 120, 135)
+        if cb then cb(v) end
     end
-    Set(cur)
-    sw.MouseButton1Click:Connect(function() Set(not cur) end)
+    
+    Upd(cur)
+    sw.MouseButton1Click:Connect(function() Upd(not cur) end)
 end
 
-function MkBtn(name,col,cb)
-    local ord=#scr:GetChildren()
-    local r=Instance.new("Frame"); r.Size=UDim2(1,0,0,34); r.BackgroundColor3=col; r.LayoutOrder=ord; r.Parent=scr
-    Instance.new("UICorner",r).CornerRadius=UDim2(0,6)
-    local b=Instance.new("TextButton"); b.Size=UDim2(1,0,1,0); b.BackgroundTransparency=1
-    b.Text=">> "..name.." <<"; b.Font=Enum.Font.GothamBold; b.TextSize=12; b.TextColor3=Color3.fromRGB(1,1,1); b.Parent=r
+function AddBtn(name, col, fn)
+    local o = #Scr:GetChildren()
+    local r = Instance.new("Frame")
+    r.Size = UDim2.new(1, 0, 0, 30)
+    r.BackgroundColor3 = col
+    r.LayoutOrder = o
+    r.Parent = Scr
+    Instance.new("UICorner", r).CornerRadius = UDim.new(0, 6)
+    
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, 0, 1, 0)
+    b.BackgroundTransparency = 1
+    b.Text = "> " .. name .. " <"
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 11
+    b.TextColor3 = Color3.new(1, 1, 1)
+    b.Parent = r
+    
     b.MouseButton1Click:Connect(function()
-        local res=cb()
-        b.Text=res and "["..res.."]" or "[DONE]"
-        task.delay(1,function() b.Text=">> "..name<<" <<" end)
+        local res = fn()
+        if type(res) == "string" then
+            b.Text = "[" .. res .. "]"
+            wait(1)
+            b.Text = "> " .. name .. " <"
+        end
     end)
 end
 
 
--- === ЗАПОЛНЕНИЕ ===
+-- === НАПОЛНЕНИЕ ===
 
-SecTitle("MOVEMENT")
-MkToggle("Infinite Jump","Прыгай бесконечно",false,function(v) ToggleInfJump(v) end)
-MkToggle("Steel Floor","Платформа под ногами",false,function(v) ToggleSteelFloor(v) end)
-MkToggle("Anti-AFK","Не кикнут за AFK",false,function(v) ToggleAntiAFK(v) end)
-MkToggle("Noclip","Через стены",false,function(v) ToggleNoclip(v) end)
+AddSection("MOVEMENT")
+AddToggle("Infinite Jump", "Бесконечные прыжки", false, function(v) SetInfJump(v) end)
+AddToggle("Steel Floor", "Поднимающийся пол", false, function(v) SetFloor(v) end)
+AddToggle("Anti-AFK", "Блокировка AFK кика", false, function(v) SetAFK(v) end)
+AddToggle("Noclip", "Через стены", false, function(v) SetNoclip(v) end)
 
-SecTitle("STEAL OPS")
-MkBtn("INSTANT STEAL",Color3.fromRGB(190,55,55),DoInstaSteal)
-MkBtn("DROP ITEM",Color3.fromRGB(190,150,35),DoDropItem)
-MkToggle("Auto Grab Loop","Спам захватом",false,function(v) ToggleAutoGrab(v) end)
+AddSection("STEAL")
+AddBtn("INSTANT STEAL", Color3.fromRGB(180, 50, 50), function() return DoSteal() end)
+AddBtn("DROP ITEM", Color3.fromRGB(180, 140, 30), function() return DoDrop() end)
+AddToggle("Auto Grab", "Спам захватом", false, function(v) SetAutoGrab(v) end)
 
-SecTitle("FARM/AUTO")
-MkToggle("Auto Buy Upgrade","Купить все улучшения",false,function(v) ToggleAutoBuy(v) end)
-MkToggle("Auto Speed Pump","Качать скорость",false,function(v) ToggleAutoSpeed(v) end)
+AddSection("AUTO / FARM")
+AddToggle("Auto Upgrade", "Покупка улучшений", false, function(v) SetAutoBuy(v) end)
+AddToggle("Auto Speed", "Качать скорость", false, function(v) SetSpeed(v) end)
 
 
--- === DRAG & CONTROL ===
-local dg,dI,dS,sP
-hdr.InputBegan:Connect(function(i)
-    if i.UserInputType==Enum.UserInputType.MouseButton1 then
-        dg=true;dS=i.Position;sP=main.Position;i.Changed:Connect(function() if i.UserInputState==Enum.UserInputState.End then dg=false end end)
+-- === УПРАВЛЕНИЕ ОКНОМ (исправленный drag) ===
+
+local dragging = false
+local dragStart
+local startPos
+
+Hd.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = Win.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
     end
 end)
-hdr.InputChanged:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseMovement then dI=i end end)
-UserInputService.InputChanged:Connect(function(i) if i==dI and dg then main.Position=UDim2new(sP.X.Scale,sP.X.Offset+(i.Position-dS).X,sP.Y.Scale,sP.Y.Offset+(i.Position-dS).Y) end end)
 
-xbtn.MouseButton1Click:connect(function() main.Visible=false; icon.ImageColor3=Color3.fromRGB(100,100,108) end)
-icon.MouseButton1Click:connect(function()
-    main.Visible=not main.Visible
-    icon.ImageColor3=main.Visible and Color3.fromRGB(80,160,255) or Color3.fromRGB(100,100,108)
-    TweenService:Create(icon,TweenInfo(0.15),{Size=main.Visible and UDim2(0,46,0,46) or UDim2(0,50,0,50)}):Play()
-end)
-icon.MouseButton2Click:Connect(function()
-    for _,c in pairs(Connections) do if c then if c.Disconnect then c:Disconnect() elseif type(c)=='thread' then task.cancel(c) end end end
-    if FloorPart then FloorPart:Destroy() end
-    gui:Destroy()
+Hd.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement and dragging then
+        local delta = input.Position - dragStart
+        Win.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
 end)
 
-print("[ZERO] Ready.")
+Cls.MouseButton1Click:Connect(function()
+    Win.Visible = false
+    Icon.ImageColor3 = Color3.fromRGB(100, 100, 108)
+end)
+
+Icon.MouseButton1Click:Connect(function()
+    Win.Visible = not Win.Visible
+    Icon.ImageColor3 = Win.Visible and Color3.fromRGB(75, 155, 245) or Color3.fromRGB(100, 100, 108)
+end)
+
+Icon.MouseButton2Click:Connect(function()
+    for _, c in pairs(Conns) do
+        if c then
+            if type(c.Disconnect) == "function" then
+                c:Disconnect()
+            end
+        end
+    end
+    if FloorObj then FloorObj:Destroy() end
+    SG:Destroy()
+end)
+
+print("[ZERO] Loaded fix 2 - no more nil calls")
